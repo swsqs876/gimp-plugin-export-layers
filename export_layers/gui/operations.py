@@ -447,9 +447,23 @@ class _OperationEditDialog(gimpui.Dialog):
   
   _PLACEHOLDER_WIDGET_HORIZONTAL_SPACING_BETWEEN_ELEMENTS = 5
   
+  _MORE_OPTIONS_BORDER_WIDTH = 4
+  _VBOX_APPLY_TO_SPACING = 4
+  _HBOX_APPLY_TO_SPACING = 8
+  
   def __init__(self, operation, pdb_procedure, *args, **kwargs):
     super().__init__(*args, **kwargs)
     
+    self._init_gui(operation, pdb_procedure)
+    
+    self._set_arguments(operation, pdb_procedure)
+    
+    self.set_focus(self._button_ok)
+    
+    self._button_reset.connect("clicked", self._on_button_reset_clicked, operation)
+    self.connect("response", self._on_operation_edit_dialog_response)
+  
+  def _init_gui(self, operation, pdb_procedure):
     self.set_transient()
     self.set_resizable(False)
     
@@ -492,14 +506,35 @@ class _OperationEditDialog(gimpui.Dialog):
         self._label_procedure_short_description, expand=False, fill=False)
     self._vbox.pack_start(self._table_operation_arguments, expand=True, fill=True)
     
+    self._set_more_options(operation)
+    
     self.vbox.pack_start(self._vbox, expand=False, fill=False)
-    
-    self._set_arguments(operation, pdb_procedure)
-    
-    self.set_focus(self._button_ok)
-    
-    self._button_reset.connect("clicked", self._on_button_reset_clicked, operation)
-    self.connect("response", self._on_operation_edit_dialog_response)
+  
+  def _set_more_options(self, operation):
+    if "procedure" in operation.tags:
+      self._label_apply_to = gtk.Label(_("Apply procedure to:"))
+      self._combobox_apply_to = gtk.ComboBox()
+      
+      self._hbox_apply_to = gtk.HBox()
+      self._hbox_apply_to.set_spacing(self._HBOX_APPLY_TO_SPACING)
+      self._hbox_apply_to.pack_start(self._label_apply_to, expand=False, fill=False)
+      self._hbox_apply_to.pack_start(self._combobox_apply_to, expand=False, fill=False)
+      
+      self._checkbutton_ignore_constraints = gtk.CheckButton(_("Ignore constraints"))
+      self._checkbutton_ignore_constraints.set_active(False)
+      
+      self._vbox_apply_to = gtk.VBox()
+      self._vbox_apply_to.set_spacing(self._VBOX_APPLY_TO_SPACING)
+      self._vbox_apply_to.set_border_width(self._MORE_OPTIONS_BORDER_WIDTH)
+      self._vbox_apply_to.pack_start(self._hbox_apply_to, expand=False, fill=False)
+      self._vbox_apply_to.pack_start(
+        self._checkbutton_ignore_constraints, expand=False, fill=False)
+      
+      self._expander_more_options = gtk.Expander(_("_More options"))
+      self._expander_more_options.set_use_underline(True)
+      self._expander_more_options.add(self._vbox_apply_to)
+      
+      self._vbox.pack_start(self._expander_more_options, expand=False, fill=False)
   
   def _set_arguments(self, operation, pdb_procedure):
     for i, setting in enumerate(operation["arguments"]):

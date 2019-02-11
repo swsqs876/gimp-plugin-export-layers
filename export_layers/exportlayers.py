@@ -165,18 +165,6 @@ class LayerExporter(object):
     return self._default_file_extension
   
   @property
-  def tagged_layer_elems(self):
-    return self._tagged_layer_elems
-  
-  @property
-  def inserted_tagged_layers(self):
-    return self._inserted_tagged_layers
-  
-  @property
-  def tagged_layer_copies(self):
-    return self._tagged_layer_copies
-  
-  @property
   def operation_executor(self):
     return self._operation_executor
   
@@ -293,10 +281,11 @@ class LayerExporter(object):
     if layer_tree is not None:
       self._layer_tree = layer_tree
     else:
-      self._layer_tree = pg.itemtree.LayerTree(
-        self.image, name=pg.config.SOURCE_NAME, is_filtered=True)
+      self._layer_tree = pg.itemtree.LayerTree(self.image, name=pg.config.SOURCE_NAME)
     
     self._keep_image_copy = keep_image_copy
+    
+    self.progress_updater.reset()
     
     self._should_stop = False
     
@@ -308,14 +297,8 @@ class LayerExporter(object):
     self._output_directory = self.export_settings["output_directory"].value
     
     self._image_copy = None
-    self._tagged_layer_elems = collections.defaultdict(list)
-    self._tagged_layer_copies = collections.defaultdict(pg.utils.return_none_func)
-    self._inserted_tagged_layers = collections.defaultdict(pg.utils.return_none_func)
-    
     self._use_another_image_copy = False
     self._another_image_copy = None
-    
-    self.progress_updater.reset()
     
     self._file_extension_properties = _get_prefilled_file_extension_properties()
     self._default_file_extension = (
@@ -330,6 +313,40 @@ class LayerExporter(object):
       pattern = self.export_settings["layer_filename_pattern"].default_value
     
     self._layer_name_renamer = renamer.LayerNameRenamer(self, pattern)
+  
+  def _setup(self):
+    pdb.gimp_context_push()
+    
+    self._image_copy = pg.pdbutils.create_image_from_metadata(self.image)
+    pdb.gimp_image_undo_freeze(self._image_copy)
+    
+    self._operation_executor.execute(
+      ["after_create_image_copy"], [self._image_copy], additional_args_position=0)
+    
+    if self._use_another_image_copy:
+      self._another_image_copy = pg.pdbutils.create_image_from_metadata(self._image_copy)
+      pdb.gimp_image_undo_freeze(self._another_image_copy)
+    
+    if pg.config.DEBUG_IMAGE_PROCESSING:
+      self._display_id = pdb.gimp_display_new(self._image_copy)
+  
+  def _cleanup(self, exception_occurred=False):
+    self._copy_non_modifying_parasites(self._image_copy, self.image)
+    
+    pdb.gimp_image_undo_thaw(self._image_copy)
+    
+    if pg.config.DEBUG_IMAGE_PROCESSING:
+      pdb.gimp_display_delete(self._display_id)
+    
+    if ((not self._keep_image_copy or self._use_another_image_copy)
+        or exception_occurred):
+      pg.pdbutils.try_delete_image(self._image_copy)
+      if self._use_another_image_copy:
+        pdb.gimp_image_undo_thaw(self._another_image_copy)
+        if exception_occurred:
+          pg.pdbutils.try_delete_image(self._another_image_copy)
+    
+    pdb.gimp_context_pop()
   
   def _add_operations(self):
     self._operation_executor.add(
@@ -375,7 +392,7 @@ class LayerExporter(object):
     else:
       self._reset_parents_in_layer_elems()
     
-    self._set_layer_constraints()
+    self._set_global_constraints()
     
     self.progress_updater.num_total_tasks = len(self._layer_tree)
     
@@ -399,7 +416,7 @@ class LayerExporter(object):
       layer_elem.children = (
         list(layer_elem.orig_children) if layer_elem.orig_children is not None else None)
   
-  def _set_layer_constraints(self):
+  def _set_global_constraints(self):
     self._layer_tree.filter.add_subfilter(
       "layer_types", pg.objectfilter.ObjectFilter(pg.objectfilter.ObjectFilter.MATCH_ANY))
     
@@ -408,20 +425,10 @@ class LayerExporter(object):
       [self],
       additional_args_position=_LAYER_EXPORTER_ARG_POSITION_IN_CONSTRAINTS)
     
-    self._init_tagged_layer_elems()
-    
     self._operation_executor.execute(
       [operations.DEFAULT_CONSTRAINTS_GROUP],
       [self],
       additional_args_position=_LAYER_EXPORTER_ARG_POSITION_IN_CONSTRAINTS)
-  
-  def _init_tagged_layer_elems(self):
-    with self._layer_tree.filter.add_rule_temp(builtin_constraints.has_tags):
-      with self._layer_tree.filter["layer_types"].add_rule_temp(
-             builtin_constraints.is_nonempty_group):
-        for layer_elem in self._layer_tree:
-          for tag in layer_elem.tags:
-            self._tagged_layer_elems[tag].append(layer_elem)
   
   def _export_layers(self):
     for layer_elem in self._layer_tree:
@@ -441,7 +448,13 @@ class LayerExporter(object):
   
   def _process_and_export_item(self, layer_elem):
     layer = layer_elem.item
+    
     layer_copy = self._process_layer(layer_elem, self._image_copy, layer)
+    
+    if not self._matches_global_constraint(layer_elem):
+      pdb.gimp_image_remove_layer(self._image_copy, layer_copy)
+      return
+    
     self._preprocess_layer_name(layer_elem)
     self._export_layer(layer_elem, self._image_copy, layer_copy)
     self._postprocess_layer(self._image_copy, layer_copy)
@@ -455,6 +468,9 @@ class LayerExporter(object):
       self._file_extension_properties[self._current_file_extension].processed_count += 1
   
   def _process_empty_group(self, layer_elem):
+    if not self._matches_global_constraint(layer_elem):
+      return
+    
     self._preprocess_empty_group_name(layer_elem)
     
     empty_group_dirpath = layer_elem.get_filepath(self._output_directory)
@@ -464,46 +480,9 @@ class LayerExporter(object):
       _('Creating empty directory "{}"').format(empty_group_dirpath))
     self.progress_updater.update_tasks()
   
-  def _setup(self):
-    pdb.gimp_context_push()
-    
-    self._image_copy = pg.pdbutils.create_image_from_metadata(self.image)
-    pdb.gimp_image_undo_freeze(self._image_copy)
-    
-    self._operation_executor.execute(
-      ["after_create_image_copy"], [self._image_copy], additional_args_position=0)
-    
-    if self._use_another_image_copy:
-      self._another_image_copy = pg.pdbutils.create_image_from_metadata(self._image_copy)
-      pdb.gimp_image_undo_freeze(self._another_image_copy)
-    
-    if pg.config.DEBUG_IMAGE_PROCESSING:
-      self._display_id = pdb.gimp_display_new(self._image_copy)
-  
-  def _cleanup(self, exception_occurred=False):
-    self._copy_non_modifying_parasites(self._image_copy, self.image)
-    
-    pdb.gimp_image_undo_thaw(self._image_copy)
-    
-    if pg.config.DEBUG_IMAGE_PROCESSING:
-      pdb.gimp_display_delete(self._display_id)
-    
-    if ((not self._keep_image_copy or self._use_another_image_copy)
-        or exception_occurred):
-      pg.pdbutils.try_delete_image(self._image_copy)
-      if self._use_another_image_copy:
-        pdb.gimp_image_undo_thaw(self._another_image_copy)
-        if exception_occurred:
-          pg.pdbutils.try_delete_image(self._another_image_copy)
-    
-    for tagged_layer_copy in self._tagged_layer_copies.values():
-      if tagged_layer_copy is not None:
-        pdb.gimp_item_delete(tagged_layer_copy)
-    
-    pdb.gimp_context_pop()
-  
   def _process_layer(self, layer_elem, image, layer):
     layer_copy = builtin_procedures.copy_and_insert_layer(image, layer, None, 0)
+    
     self._operation_executor.execute(
       ["after_insert_layer"], [image, layer_copy, self], additional_args_position=0)
     
@@ -577,6 +556,9 @@ class LayerExporter(object):
   
   def _get_uniquifier_position(self, str_):
     return len(str_) - len("." + self._current_file_extension)
+  
+  def _matches_global_constraint(self, layer_elem):
+    return self._layer_tree.filter.is_match(layer_elem)
   
   def _export_layer(self, layer_elem, image, layer):
     self._process_layer_name(layer_elem)
