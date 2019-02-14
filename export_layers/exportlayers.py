@@ -449,10 +449,13 @@ class LayerExporter(object):
   def _process_and_export_item(self, layer_elem):
     layer = layer_elem.item
     
+    matches_global_constraint = self._matches_global_constraint(layer_elem)
+    
     layer_copy = self._process_layer(layer_elem, self._image_copy, layer)
     
-    if not self._matches_global_constraint(layer_elem):
-      pdb.gimp_image_remove_layer(self._image_copy, layer_copy)
+    if not matches_global_constraint:
+      if layer_copy is not None:
+        pdb.gimp_image_remove_layer(self._image_copy, layer_copy)
       return
     
     self._preprocess_layer_name(layer_elem)
