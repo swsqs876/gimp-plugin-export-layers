@@ -82,9 +82,6 @@ class ItemTree(future.utils.with_metaclass(abc.ABCMeta, object)):
     used as an identifier of the persistent source for tags in items. See
     `_ItemTreeElement.tags` for more information.
   
-  * `is_filtered` - If `True`, ignore items that do not match the filter
-    (`ObjectFilter`) in this object when iterating.
-  
   * `filter` - `ObjectFilter` instance that allows filtering items based on
     filters and subfilters.
   """
@@ -93,11 +90,9 @@ class ItemTree(future.utils.with_metaclass(abc.ABCMeta, object)):
         self,
         image,
         name=None,
-        is_filtered=False,
         filter_match_type=pgobjectfilter.ObjectFilter.MATCH_ALL):
     self._image = image
     self._name = name
-    self.is_filtered = is_filtered
     self._filter_match_type = filter_match_type
     
     # Filters applied to all items in `self._itemtree`
@@ -162,14 +157,24 @@ class ItemTree(future.utils.with_metaclass(abc.ABCMeta, object)):
   
   def __iter__(self):
     """
-    If the `is_filtered` attribute is `False`, iterate over all items. If
-    `is_filtered` is `True`, iterate only over items that match the filter.
+    Iterate over all items.
     
     Yields:
     
     * `item_elem` - The current `_ItemTreeElement` object.
     """
-    if not self.is_filtered:
+    return self.iter(is_filtered=False)
+  
+  def iter(self, is_filtered=False):
+    """
+    If `is_filtered` is `False`, iterate over all items. If `True`, iterate only
+    over items matching the `filter` attribute (`ObjectFilter` instance).
+    
+    Yields:
+    
+    * `item_elem` - The current `_ItemTreeElement` object.
+    """
+    if not is_filtered:
       for item_elem in self._itemtree.values():
         yield item_elem
     else:

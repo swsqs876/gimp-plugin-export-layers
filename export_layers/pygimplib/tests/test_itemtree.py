@@ -164,10 +164,10 @@ class TestLayerTree(unittest.TestCase):
     
     self.assertEqual(len(self.layer_tree), layer_count_total)
     
-    self.layer_tree.is_filtered = True
     self.layer_tree.filter.add_rule(LayerFilterRules.is_layer)
     
-    self.assertEqual(len(self.layer_tree), layer_count_only_layers)
+    self.assertEqual(
+      len(list(self.layer_tree.iter(is_filtered=True))), layer_count_only_layers)
   
   def test_get_filepath(self):
     output_dirpath = os.path.join("D:", os.sep, "testgimp")
@@ -231,10 +231,9 @@ class TestLayerTree(unittest.TestCase):
     # not inside `uniquify_names()` as the code that uses this method may need
     # to uniquify non-empty layer groups in some scenarios (such as when merging
     # non-empty layer groups into layers, which would not match the filter).
-    self.layer_tree.is_filtered = True
     self.layer_tree.filter.add_rule(LayerFilterRules.is_layer_or_empty_group)
     
-    for layer_elem in self.layer_tree:
+    for layer_elem in self.layer_tree.iter(is_filtered=True):
       self.layer_tree.validate_name(layer_elem)
       self.layer_tree.uniquify_name(layer_elem, include_item_path=False)
     self._compare_uniquified_without_parents(self.layer_tree, uniquified_names)
@@ -272,10 +271,9 @@ class TestLayerTree(unittest.TestCase):
       ("alt-corners", ["main-background.jpg (2)", "alt-corners"]),
     ])
     
-    self.layer_tree.is_filtered = True
     self.layer_tree.filter.add_rule(LayerFilterRules.is_layer_or_empty_group)
     
-    for layer_elem in self.layer_tree:
+    for layer_elem in self.layer_tree.iter(is_filtered=True):
       self.layer_tree.validate_name(layer_elem)
       self.layer_tree.uniquify_name(layer_elem, include_item_path=True)
     self._compare_uniquified_with_parents(self.layer_tree, uniquified_names)
@@ -293,10 +291,9 @@ class TestLayerTree(unittest.TestCase):
       ("main-background.jpg::", ["main-background.jpg (1)"])
     ])
     
-    self.layer_tree.is_filtered = True
     self.layer_tree.filter.add_rule(LayerFilterRules.is_layer_or_empty_group)
     
-    for layer_elem in self.layer_tree:
+    for layer_elem in self.layer_tree.iter(is_filtered=True):
       self.layer_tree.validate_name(layer_elem)
       self.layer_tree.uniquify_name(
         layer_elem,
