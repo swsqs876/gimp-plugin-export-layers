@@ -123,7 +123,7 @@ class LayerExporter(object):
       export_context_manager_args if export_context_manager_args is not None else [])
     
     self._exported_layers = []
-    self._exported_layers_ids = set()
+    self._exported_layer_ids = set()
     self._current_layer_elem = None
     self._default_file_extension = None
     
@@ -226,7 +226,7 @@ class LayerExporter(object):
     Return `True` if the specified `gimp.Layer` was exported in the last export,
     `False` otherwise.
     """
-    return layer.ID in self._exported_layers_ids
+    return layer.ID in self._exported_layer_ids
   
   def stop(self):
     self._should_stop = True
@@ -289,7 +289,7 @@ class LayerExporter(object):
     self._should_stop = False
     
     self._exported_layers = []
-    self._exported_layers_ids = set()
+    self._exported_layer_ids = set()
     
     self._current_layer_elem = None
     
@@ -466,7 +466,7 @@ class LayerExporter(object):
     
     if self._current_overwrite_mode != pg.overwrite.OverwriteModes.SKIP:
       self._exported_layers.append(layer)
-      self._exported_layers_ids.add(layer.ID)
+      self._exported_layer_ids.add(layer.ID)
       self._file_extension_properties[self._current_file_extension].processed_count += 1
   
   def _process_empty_group(self, layer_elem):
