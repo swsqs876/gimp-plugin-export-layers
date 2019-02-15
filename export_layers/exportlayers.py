@@ -36,7 +36,6 @@ import gimpenums
 from export_layers import pygimplib as pg
 
 from . import builtin_procedures
-from . import builtin_constraints
 from . import operations
 from . import placeholders
 from . import renamer
@@ -393,16 +392,15 @@ class LayerExporter(object):
     
     self._set_global_constraints()
     
-    self.progress_updater.num_total_tasks = len(self._layer_tree)
+    self.progress_updater.num_total_tasks = len(
+      list(self._layer_tree.iter(is_filtered=True)))
     
     if self._keep_image_copy:
-      with self._layer_tree.filter["layer_types"].remove_rule_temp(
-             builtin_constraints.is_empty_group, False):
-        num_layers_and_nonempty_groups = len(self._layer_tree)
-        if num_layers_and_nonempty_groups > 1:
-          self._use_another_image_copy = True
-        elif num_layers_and_nonempty_groups < 1:
-          self._keep_image_copy = False
+      num_layers = len(list(self._layer_tree.iter(is_filtered=True)))
+      if num_layers > 1:
+        self._use_another_image_copy = True
+      elif num_layers < 1:
+        self._keep_image_copy = False
   
   def _remove_parents_in_layer_elems(self):
     for layer_elem in self._layer_tree:
@@ -416,14 +414,6 @@ class LayerExporter(object):
         list(layer_elem.orig_children) if layer_elem.orig_children is not None else None)
   
   def _set_global_constraints(self):
-    self._layer_tree.filter.add_subfilter(
-      "layer_types", pg.objectfilter.ObjectFilter(pg.objectfilter.ObjectFilter.MATCH_ANY))
-    
-    self._executor.execute(
-      [builtin_constraints.CONSTRAINTS_LAYER_TYPES_GROUP],
-      [self],
-      additional_args_position=_LAYER_EXPORTER_ARG_POSITION_IN_CONSTRAINTS)
-    
     self._executor.execute(
       [operations.DEFAULT_CONSTRAINTS_GROUP],
       [self],
@@ -716,7 +706,11 @@ def add_operation_from_settings(operation, executor):
     function = _get_operation_func_with_replaced_placeholders(function)
   
   if "constraint" in operation.tags:
-    function = _get_constraint_func(function, subfilter=operation["subfilter"].value)
+    function = _get_constraint_func(
+      function,
+      subfilter=operation["subfilter"].value,
+      match_type=operation.get_value(
+        "subfilter_match_type", pg.objectfilter.ObjectFilter.MATCH_ALL))
   
   function = _execute_operation_only_if_enabled(function, operation["enabled"])
   
@@ -754,14 +748,19 @@ def _execute_operation_only_if_enabled(operation, setting_enabled):
   return _execute_operation
 
 
-def _get_constraint_func(rule_func, subfilter=None):
+def _get_constraint_func(
+      rule_func, subfilter=None, match_type=pg.objectfilter.ObjectFilter.MATCH_ALL):
+  
   def _add_rule_func(*args):
     layer_exporter, rule_func_args = _get_args_for_constraint_func(rule_func, args)
     
-    if subfilter is None:
-      object_filter = layer_exporter.layer_tree.filter
-    else:
-      object_filter = layer_exporter.layer_tree.filter[subfilter]
+    object_filter = layer_exporter.layer_tree.filter
+    
+    if subfilter:
+      if not object_filter.has_subfilter(subfilter):
+        object_filter.add_subfilter(subfilter, pg.objectfilter.ObjectFilter(match_type))
+      
+      object_filter = object_filter[subfilter]
     
     object_filter.add_rule(rule_func, *rule_func_args)
   

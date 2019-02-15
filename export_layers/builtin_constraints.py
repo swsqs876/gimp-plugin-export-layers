@@ -29,9 +29,6 @@ import collections
 from export_layers import pygimplib as pg
 
 
-CONSTRAINTS_LAYER_TYPES_GROUP = "constraints_layer_types"
-
-
 def is_layer(layer_elem):
   return layer_elem.item_type == layer_elem.ITEM
 
@@ -82,7 +79,7 @@ _BUILTIN_CONSTRAINTS_LIST = [
     "function": is_layer,
     "display_name": _("Include layers"),
     "subfilter": "layer_types",
-    "operation_groups": [CONSTRAINTS_LAYER_TYPES_GROUP],
+    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
   },
   {
     "name": "include_layer_groups",
@@ -90,7 +87,7 @@ _BUILTIN_CONSTRAINTS_LIST = [
     "function": is_nonempty_group,
     "display_name": _("Include layer groups"),
     "subfilter": "layer_types",
-    "operation_groups": [CONSTRAINTS_LAYER_TYPES_GROUP],
+    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
   },
   {
     "name": "include_empty_layer_groups",
@@ -98,7 +95,7 @@ _BUILTIN_CONSTRAINTS_LIST = [
     "function": is_empty_group,
     "display_name": _("Include empty layer groups"),
     "subfilter": "layer_types",
-    "operation_groups": [CONSTRAINTS_LAYER_TYPES_GROUP],
+    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
   },
   {
     "name": "only_visible_layers",
