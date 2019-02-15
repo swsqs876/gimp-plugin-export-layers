@@ -166,7 +166,12 @@ class LayerExporter(object):
   def executor(self):
     return self._executor
   
-  def export(self, processing_groups=None, layer_tree=None, keep_image_copy=False):
+  def export(
+        self,
+        processing_groups=None,
+        layer_tree=None,
+        keep_image_copy=False,
+        disable_local_constraints=False):
     """
     Export layers as separate images from the specified image.
     
@@ -197,8 +202,12 @@ class LayerExporter(object):
     copy, pass `True` to `keep_image_copy`. In that case, this method returns
     the image copy. If an exception was raised or if no layer was exported, this
     method returns `None` and the image copy will be destroyed.
+    
+    If `disable_local_constraints` is `True`, ignore local (per-procedure)
+    constraints. This speeds up the export at the expense of customizability.
     """
-    self._init_attributes(processing_groups, layer_tree, keep_image_copy)
+    self._init_attributes(
+      processing_groups, layer_tree, keep_image_copy, disable_local_constraints)
     self._preprocess_layers()
     
     exception_occurred = False
@@ -270,7 +279,8 @@ class LayerExporter(object):
     """
     self._initial_executor.reorder(*args, **kwargs)
   
-  def _init_attributes(self, processing_groups, layer_tree, keep_image_copy):
+  def _init_attributes(
+        self, processing_groups, layer_tree, keep_image_copy, disable_local_constraints):
     self._executor = pg.executor.Executor()
     self._add_operations()
     
@@ -282,6 +292,7 @@ class LayerExporter(object):
       self._layer_tree = pg.itemtree.LayerTree(self.image, name=pg.config.SOURCE_NAME)
     
     self._keep_image_copy = keep_image_copy
+    self._disable_local_constraints = disable_local_constraints
     
     self.progress_updater.reset()
     
@@ -420,7 +431,7 @@ class LayerExporter(object):
       additional_args_position=_LAYER_EXPORTER_ARG_POSITION_IN_CONSTRAINTS)
   
   def _export_layers(self):
-    for layer_elem in self._layer_tree:
+    for layer_elem in self._layer_tree.iter(is_filtered=self._disable_local_constraints):
       if self._should_stop:
         raise ExportLayersCancelError("export stopped by user")
       
