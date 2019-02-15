@@ -308,7 +308,7 @@ class ExportNamePreview(preview_base_.ExportPreview):
   
   def _update_available_tags(self):
     used_tags = set()
-    for layer_elem in self._layer_exporter.layer_tree:
+    for layer_elem in self._layer_exporter.layer_tree.iter(is_filtered=True):
       for tag in layer_elem.tags:
         used_tags.add(tag)
         if tag not in self._tags_menu_items:
@@ -533,12 +533,12 @@ class ExportNamePreview(preview_base_.ExportPreview):
     self._layer_exporter.export(processing_groups=["layer_name"], layer_tree=layer_tree)
   
   def _update_items(self):
-    for layer_elem in self._layer_exporter.layer_tree:
+    for layer_elem in self._layer_exporter.layer_tree.iter(is_filtered=True):
       self._update_parent_item_elems(layer_elem)
       self._update_item_elem(layer_elem)
   
   def _insert_items(self):
-    for layer_elem in self._layer_exporter.layer_tree:
+    for layer_elem in self._layer_exporter.layer_tree.iter(is_filtered=True):
       self._insert_parent_item_elems(layer_elem)
       self._insert_item_elem(layer_elem)
   
@@ -589,7 +589,8 @@ class ExportNamePreview(preview_base_.ExportPreview):
   
   def _set_items_sensitive(self):
     if self.is_filtering:
-      self._set_item_elems_sensitive(self._layer_exporter.layer_tree, False)
+      self._set_item_elems_sensitive(
+        self._layer_exporter.layer_tree.iter(is_filtered=True), False)
       self._set_item_elems_sensitive(
         [self._layer_exporter.layer_tree[item_id] for item_id in self._selected_items],
         True)
@@ -662,9 +663,13 @@ class ExportNamePreview(preview_base_.ExportPreview):
     if self._layer_exporter.layer_tree is None:
       return
     
+    exported_layer_ids = set([
+      layer_elem.item.ID
+      for layer_elem in self._layer_exporter.layer_tree.iter(is_filtered=True)])
+    
     self._collapsed_items = set(
       [collapsed_item for collapsed_item in self._collapsed_items
-       if collapsed_item in self._layer_exporter.layer_tree])
+       if collapsed_item in exported_layer_ids])
   
   def _set_selection(self):
     self._row_select_interactive = False
