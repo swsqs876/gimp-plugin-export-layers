@@ -33,12 +33,8 @@ def is_layer(layer_elem):
   return layer_elem.item_type == layer_elem.ITEM
 
 
-def is_nonempty_group(layer_elem):
-  return layer_elem.item_type == layer_elem.NONEMPTY_GROUP
-
-
-def is_empty_group(layer_elem):
-  return layer_elem.item_type == layer_elem.EMPTY_GROUP
+def is_group(layer_elem):
+  return layer_elem.item_type in [layer_elem.NONEMPTY_GROUP, layer_elem.EMPTY_GROUP]
 
 
 def is_path_visible(layer_elem):
@@ -74,28 +70,16 @@ def is_layer_in_selected_layers(layer_elem, selected_layers):
 
 _BUILTIN_CONSTRAINTS_LIST = [
   {
-    "name": "include_layers",
+    "name": "only_layers",
     "type": "constraint",
     "function": is_layer,
-    "display_name": _("Include layers"),
-    "subfilter": "layer_types",
-    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
+    "display_name": _("Only layers"),
   },
   {
-    "name": "include_layer_groups",
+    "name": "only_layer_groups",
     "type": "constraint",
-    "function": is_nonempty_group,
-    "display_name": _("Include layer groups"),
-    "subfilter": "layer_types",
-    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
-  },
-  {
-    "name": "include_empty_layer_groups",
-    "type": "constraint",
-    "function": is_empty_group,
-    "display_name": _("Include empty layer groups"),
-    "subfilter": "layer_types",
-    "subfilter_match_type": pg.objectfilter.ObjectFilter.MATCH_ANY,
+    "function": is_group,
+    "display_name": _("Only layer groups"),
   },
   {
     "name": "only_visible_layers",

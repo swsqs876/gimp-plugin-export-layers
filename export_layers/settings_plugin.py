@@ -162,7 +162,7 @@ def create_settings():
   settings["main"].add([operations.create(
     name="constraints",
     initial_operations=[
-      builtin_constraints.BUILTIN_CONSTRAINTS["include_layers"],
+      builtin_constraints.BUILTIN_CONSTRAINTS["only_layers"],
       builtin_constraints.BUILTIN_CONSTRAINTS["only_visible_layers"]]),
   ])
   
