@@ -512,7 +512,7 @@ class _OperationEditDialog(gimpui.Dialog):
   
   def _set_more_options(self, operation):
     if "procedure" in operation.tags:
-      self._label_apply_to = gtk.Label(_("Apply procedure to:"))
+      self._label_apply_to = gtk.Label(_("Apply Procedure to:"))
       
       self._hbox_apply_to = gtk.HBox()
       self._hbox_apply_to.set_spacing(self._HBOX_APPLY_TO_SPACING)
@@ -527,10 +527,10 @@ class _OperationEditDialog(gimpui.Dialog):
       self._vbox_apply_to.pack_start(
         operation["ignore_global_constraints"].gui.element, expand=False, fill=False)
       
-      operation["more_options_expanded"].gui.element.add(self._vbox_apply_to)
+      operation["more_options_enabled"].gui.element.add(self._vbox_apply_to)
       
       self._vbox.pack_start(
-        operation["more_options_expanded"].gui.element, expand=False, fill=False)
+        operation["more_options_enabled"].gui.element, expand=False, fill=False)
   
   def _set_arguments(self, operation, pdb_procedure):
     for i, setting in enumerate(operation["arguments"]):
@@ -575,8 +575,8 @@ class _OperationEditDialog(gimpui.Dialog):
     if "procedure" in operation.tags:
       self._hbox_apply_to.remove(operation["local_constraint"].gui.element)
       self._vbox_apply_to.remove(operation["ignore_global_constraints"].gui.element)
-      operation["more_options_expanded"].gui.element.remove(self._vbox_apply_to)
-      self._vbox.remove(operation["more_options_expanded"].gui.element)
+      operation["more_options_enabled"].gui.element.remove(self._vbox_apply_to)
+      self._vbox.remove(operation["more_options_enabled"].gui.element)
   
   def _create_placeholder_widget(self):
     hbox = gtk.HBox()

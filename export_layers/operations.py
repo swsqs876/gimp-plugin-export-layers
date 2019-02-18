@@ -387,13 +387,13 @@ def _create_procedure(name, **create_operation_kwargs):
       "type": pg.SettingTypes.boolean,
       "name": "ignore_global_constraints",
       "default_value": False,
-      "display_name": _("Ignore constraints"),
+      "display_name": _("Ignore Constraints"),
     },
     {
       "type": pg.SettingTypes.boolean,
-      "name": "more_options_expanded",
+      "name": "more_options_enabled",
       "default_value": False,
-      "display_name": _("_More options"),
+      "display_name": _("_More Options"),
       "gui_type": pg.SettingGuiTypes.expander,
     },
   ])
