@@ -83,6 +83,10 @@ class LayerExporter(object):
   * `current_layer_elem` (read-only) - The `itemtree._ItemTreeElement` instance
     being currently exported.
   
+  * `current_layer_elem_matches_global_constraints` (read-only) - `True` if the
+    `itemtree._ItemTreeElement` instance being currently exported matches global
+    constraints, `False` otherwise.
+  
   * `executor` - `pygimplib.executor.Executor` instance to manage operations
     applied on layers. This property is not `None` only during `export()` and
     can be used to modify the execution of operations while processing layers.
@@ -124,6 +128,7 @@ class LayerExporter(object):
     self._exported_layers = []
     self._exported_layer_ids = set()
     self._current_layer_elem = None
+    self._current_layer_elem_matches_global_constraints = True
     self._default_file_extension = None
     
     self._should_stop = False
@@ -157,6 +162,10 @@ class LayerExporter(object):
   @property
   def current_layer_elem(self):
     return self._current_layer_elem
+  
+  @property
+  def current_layer_elem_matches_global_constraints(self):
+    return self._current_layer_elem_matches_global_constraints
   
   @property
   def default_file_extension(self):
@@ -302,6 +311,7 @@ class LayerExporter(object):
     self._exported_layer_ids = set()
     
     self._current_layer_elem = None
+    self._current_layer_elem_matches_global_constraints = True
     
     self._output_directory = self.export_settings["output_directory"].value
     
@@ -371,7 +381,11 @@ class LayerExporter(object):
       self._initial_executor.list_groups(include_empty_groups=True))
     
     for procedure in operations.walk(self.export_settings["procedures"]):
-      add_operation_from_settings(procedure, self._executor)
+      add_operation_from_settings(
+        procedure,
+        self._executor,
+        {constraint.name: constraint
+         for constraint in operations.walk(self.export_settings["constraints"])})
     
     for constraint in operations.walk(self.export_settings["constraints"]):
       add_operation_from_settings(constraint, self._executor)
@@ -436,6 +450,8 @@ class LayerExporter(object):
         raise ExportLayersCancelError("export stopped by user")
       
       self._current_layer_elem = layer_elem
+      self._current_layer_elem_matches_global_constraints = (
+        self._matches_global_constraint(layer_elem))
       
       if layer_elem.item_type in (layer_elem.ITEM, layer_elem.NONEMPTY_GROUP):
         self._process_and_export_item(layer_elem)
@@ -449,13 +465,9 @@ class LayerExporter(object):
   def _process_and_export_item(self, layer_elem):
     layer = layer_elem.item
     
-    matches_global_constraint = self._matches_global_constraint(layer_elem)
-    
     layer_copy = self._process_layer(layer_elem, self._image_copy, layer)
     
-    if not matches_global_constraint:
-      if layer_copy is not None:
-        pdb.gimp_image_remove_layer(self._image_copy, layer_copy)
+    if not self._current_layer_elem_matches_global_constraints:
       return
     
     self._preprocess_layer_name(layer_elem)
@@ -471,7 +483,7 @@ class LayerExporter(object):
       self._file_extension_properties[self._current_file_extension].processed_count += 1
   
   def _process_empty_group(self, layer_elem):
-    if not self._matches_global_constraint(layer_elem):
+    if not self._current_layer_elem_matches_global_constraints:
       return
     
     self._preprocess_empty_group_name(layer_elem)
@@ -503,7 +515,11 @@ class LayerExporter(object):
     self._executor.execute(
       ["after_process_layer"], [image, layer_copy, self], additional_args_position=0)
     
-    return layer_copy
+    if self._current_layer_elem_matches_global_constraints:
+      return layer_copy
+    else:
+      pdb.gimp_image_remove_layer(image, layer_copy)
+      return None
   
   def _postprocess_layer(self, image, layer):
     if not self._keep_image_copy:
@@ -690,7 +706,7 @@ class LayerExporter(object):
 _LAYER_EXPORTER_ARG_POSITION_IN_CONSTRAINTS = 1
 
 
-def add_operation_from_settings(operation, executor):
+def add_operation_from_settings(operation, executor, constraints=None):
   if operation.get_value("is_pdb_procedure", False):
     try:
       function = pdb[operation["function"].value.encode(pg.GIMP_CHARACTER_ENCODING)]
@@ -713,8 +729,11 @@ def add_operation_from_settings(operation, executor):
     
     function = _get_operation_func_for_pdb_procedure(function)
   
-  if "constraint" not in operation.tags:
-    function = _get_operation_func_with_replaced_placeholders(function)
+  if "procedure" in operation.tags:
+    function = _get_procedure_func(
+      function,
+      _get_constraint_by_name(operation["local_constraint"].value, constraints),
+      operation["ignore_global_constraints"].value)
   
   if "constraint" in operation.tags:
     function = _get_constraint_func(
@@ -723,7 +742,7 @@ def add_operation_from_settings(operation, executor):
       match_type=operation.get_value(
         "subfilter_match_type", pg.objectfilter.ObjectFilter.MATCH_ALL))
   
-  function = _execute_operation_only_if_enabled(function, operation["enabled"])
+  function = _execute_operation_only_if_enabled(function, operation["enabled"].value)
   
   executor.add(
     function, operation["operation_groups"].value, function_args, function_kwargs)
@@ -740,23 +759,44 @@ def _get_operation_func_for_pdb_procedure(pdb_procedure):
   return _pdb_procedure_as_operation
 
 
-def _get_operation_func_with_replaced_placeholders(function):
+def _get_constraint_by_name(constraint_name, constraints):
+  if constraints is None:
+    return None
+  
+  try:
+    return constraints[constraint_name]
+  except KeyError:
+    return None
+
+
+def _get_procedure_func(function, local_constraint, ignore_global_constraints):
   def _operation(image, layer, layer_exporter, *args, **kwargs):
     new_args, new_kwargs = placeholders.get_replaced_args_and_kwargs(
       args, kwargs, image, layer, layer_exporter)
-    function(image, layer, layer_exporter, *new_args, **new_kwargs)
+    
+    if _matches_constraints(layer_exporter, local_constraint, ignore_global_constraints):
+      function(image, layer, layer_exporter, *new_args, **new_kwargs)
   
   return _operation
 
 
-def _execute_operation_only_if_enabled(operation, setting_enabled):
-  def _execute_operation(*operation_args, **operation_kwargs):
-    if setting_enabled.value:
-      return operation(*operation_args, **operation_kwargs)
-    else:
-      return False
+def _matches_constraints(layer_exporter, local_constraint, ignore_global_constraints):
+  matches_constraints = layer_exporter.current_layer_elem_matches_global_constraints
   
-  return _execute_operation
+  if local_constraint is not None:
+    local_constraint_func = local_constraint["function"].value
+    local_constraint_args = tuple(
+      arg_setting.value for arg_setting in local_constraint["arguments"])
+    
+    matches_local_constraint = local_constraint_func(
+      layer_exporter.current_layer_elem, *local_constraint_args)
+    
+    if not ignore_global_constraints:
+      matches_constraints = matches_constraints and matches_local_constraint
+    else:
+      matches_constraints = matches_local_constraint
+  
+  return matches_constraints
 
 
 def _get_constraint_func(
@@ -801,6 +841,16 @@ def _get_args_for_constraint_func(rule_func, args):
       args[:layer_exporter_arg_position] + args[layer_exporter_arg_position + 1:])
   
   return layer_exporter, rule_func_args
+
+
+def _execute_operation_only_if_enabled(operation, enabled):
+  def _execute_operation(*operation_args, **operation_kwargs):
+    if enabled:
+      return operation(*operation_args, **operation_kwargs)
+    else:
+      return False
+  
+  return _execute_operation
 
 
 class _FileExtension(object):

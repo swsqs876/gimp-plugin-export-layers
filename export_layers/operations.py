@@ -276,7 +276,7 @@ def _set_values_for_operations(added_data_values_setting, added_operations_group
         added_data_values_setting.value[setting.get_path(added_operations_group)])
 
 
-def _create_procedure(
+def _create_operation(
       name,
       function=None,
       arguments=None,
@@ -285,14 +285,9 @@ def _create_procedure(
       operation_groups=None,
       **custom_fields):
   
-  def _set_display_name_for_enabled_gui(setting_enabled, setting_display_name):
-    setting_display_name.set_gui(
-      gui_type=pg.setting.SettingGuiTypes.check_button_label,
-      gui_element=setting_enabled.gui.element)
-  
   operation = pg.setting.Group(
     name,
-    tags=["operation", "procedure"],
+    tags=["operation"],
     setting_attributes={
       "pdb_type": None,
       "setting_sources": None,
@@ -307,9 +302,6 @@ def _create_procedure(
   
   if arguments:
     arguments_group.add(arguments)
-  
-  if operation_groups is None:
-    operation_groups = [DEFAULT_PROCEDURES_GROUP]
   
   operation.add([
     {
@@ -371,13 +363,50 @@ def _create_procedure(
   return operation
 
 
-def _create_constraint(name, function, subfilter=None, **create_operation_kwargs):
+def _set_display_name_for_enabled_gui(setting_enabled, setting_display_name):
+  setting_display_name.set_gui(
+    gui_type=pg.setting.SettingGuiTypes.check_button_label,
+    gui_element=setting_enabled.gui.element)
+
+
+def _create_procedure(name, **create_operation_kwargs):
+  if create_operation_kwargs.get("operation_groups", None) is None:
+    create_operation_kwargs["operation_groups"] = [DEFAULT_PROCEDURES_GROUP]
+  
+  procedure = _create_operation(name, **create_operation_kwargs)
+  
+  procedure.tags.add("procedure")
+  
+  procedure.add([
+    {
+      "type": pg.SettingTypes.string,
+      "name": "local_constraint",
+      "default_value": "",
+    },
+    {
+      "type": pg.SettingTypes.boolean,
+      "name": "ignore_global_constraints",
+      "default_value": False,
+      "display_name": _("Ignore constraints"),
+    },
+    {
+      "type": pg.SettingTypes.boolean,
+      "name": "more_options_expanded",
+      "default_value": False,
+      "display_name": _("_More options"),
+      "gui_type": pg.SettingGuiTypes.expander,
+    },
+  ])
+  
+  return procedure
+  
+
+def _create_constraint(name, subfilter=None, **create_operation_kwargs):
   if create_operation_kwargs.get("operation_groups", None) is None:
     create_operation_kwargs["operation_groups"] = [DEFAULT_CONSTRAINTS_GROUP]
   
-  constraint = _create_procedure(name, function, **create_operation_kwargs)
+  constraint = _create_operation(name, **create_operation_kwargs)
   
-  constraint.tags.remove("procedure")
   constraint.tags.add("constraint")
   
   constraint.add([
