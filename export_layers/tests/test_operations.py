@@ -75,7 +75,7 @@ test_procedures = [
 
 test_constraints = [
   {
-    "name": "include_layers",
+    "name": "only_layers",
     "type": "constraint",
     "function": pg.utils.empty_func,
     "enabled": True,
@@ -146,7 +146,7 @@ class TestCreateOperations(unittest.TestCase):
     ("constraint_with_custom_subfilter",
      "constraints",
      test_constraints,
-     "include_layers",
+     "only_layers",
      ["operation", "constraint"],
      {
        "operation_groups": [operations.DEFAULT_CONSTRAINTS_GROUP],
@@ -452,7 +452,7 @@ class TestWalkOperations(unittest.TestCase):
      ["autocrop",
       "autocrop_background",
       "autocrop_foreground",
-      "include_layers",
+      "only_layers",
       "only_visible_layers"]),
     
     ("specific_type_entire_operations",
@@ -468,7 +468,7 @@ class TestWalkOperations(unittest.TestCase):
      ["autocrop/enabled",
       "autocrop_background/enabled",
       "autocrop_foreground/enabled",
-      "include_layers/enabled",
+      "only_layers/enabled",
       "only_visible_layers/enabled"]),
     
     ("specific_types_specific_setting",
@@ -853,3 +853,61 @@ class TestGetOperationDictAsPdbProcedure(unittest.TestCase):
       operation_dict["arguments"][-2]["type"], placeholders.PlaceholderImageSetting)
     self.assertEqual(
       operation_dict["arguments"][-1]["type"], placeholders.PlaceholderLayerSetting)
+
+
+class TestCreateConstraintSetting(unittest.TestCase):
+  
+  @parameterized.parameterized.expand([
+    ("without_default_value_display_name",
+     {},
+     {"default_value_display_name": "",
+      "constraints": None,
+      "constraints_iter": []}),
+    ("with_default_value_display_name",
+     {"default_value_display_name": "Constraint"},
+     {"default_value_display_name": "Constraint",
+      "constraints": None,
+      "constraints_iter": []}),
+  ])
+  def test_create_setting_with_no_constraints(
+        self, test_case_name_suffix, kwargs, expected_properties):
+    setting = operations.ConstraintSetting("constraint", **kwargs)
+    
+    for property_name, property_value in expected_properties.items():
+      self.assertEqual(getattr(setting, property_name), property_value)
+  
+  def test_create_setting_with_constraints(self):
+    constraints = operations.create("constraints", get_operation_data(test_constraints))
+    setting = operations.ConstraintSetting("constraint", constraints=constraints)
+    
+    self.assertEqual(setting.constraints, constraints)
+    self.assertEqual(
+      list(setting.constraints_iter),
+      list(constraint for constraint in operations.walk(constraints)))
+
+
+@mock.patch(
+  pg.PYGIMPLIB_MODULE_PATH + ".operations.ConstraintSetting.gui",
+  new_callable=mock.PropertyMock)
+class TestConstraintSetting(unittest.TestCase):
+  
+  def setUp(self):
+    self.constraints = (
+      operations.create("constraints", get_operation_data(test_constraints)))
+    self.setting = (
+      operations.ConstraintSetting("constraint", constraints=self.constraints))
+  
+  @parameterized.parameterized.expand([
+    ("value_in_constraints", "only_layers", "only_layers"),
+    ("value_not_in_constraints", "invalid_constraint", ""),
+  ])
+  def test_set_value(self, test_case_name_suffix, constraint_name, expected_value):
+    self.setting.set_value(constraint_name)
+    self.assertEqual(self.setting.value, expected_value)
+  
+  def test_get_constraint_for_existing_constraint_name(self):
+    self.assertEqual(
+      self.setting.get_constraint("only_layers"), self.constraints["added/only_layers"])
+  
+  def test_get_constraint(self):
+    self.assertEqual(self.setting.get_constraint("invalid_constraint"), None)

@@ -81,6 +81,8 @@ from export_layers import pygimplib as pg
 
 from . import placeholders
 
+from .gui import presenters as gui_presenters
+
 
 BUILTIN_TAGS = {
   "background": _("Background"),
@@ -379,9 +381,10 @@ def _create_procedure(name, **create_operation_kwargs):
   
   procedure.add([
     {
-      "type": pg.SettingTypes.string,
+      "type": ConstraintSetting,
       "name": "local_constraint",
       "default_value": "",
+      "default_value_display_name": _("All layers"),
     },
     {
       "type": pg.SettingTypes.boolean,
@@ -755,3 +758,111 @@ class UnsupportedPdbProcedureError(Exception):
   def __init__(self, procedure_name, unsupported_param_type):
     self.procedure_name = procedure_name
     self.unsupported_param_type = unsupported_param_type
+
+
+class ConstraintSetting(pg.setting.StringSetting):
+  """
+  This setting class allows storing a constraint name, restricted to the
+  specified list of constraints.
+  """
+  
+  _ALLOWED_GUI_TYPES = [gui_presenters.ConstraintComboBoxPresenter]
+  
+  _constraints_set = set()
+  
+  def __init__(self, *args, **kwargs):
+    self._default_value_display_name = kwargs.pop("default_value_display_name", "")
+    self._constraints = kwargs.pop("constraints", None)
+    self._names_and_constraints = {}
+    
+    super().__init__(*args, **kwargs)
+    
+    if self._constraints is not None:
+      self.set_constraints(self._constraints)
+  
+  @property
+  def constraints(self):
+    return self._constraints
+  
+  @property
+  def constraints_iter(self):
+    if self._constraints is not None:
+      return (constraint for constraint in walk(self._constraints))
+    else:
+      return []
+  
+  @property
+  def default_value_display_name(self):
+    return self._default_value_display_name
+  
+  def set_value(self, value):
+    if value not in self._names_and_constraints:
+      value = self._default_value
+    
+    super().set_value(value)
+  
+  def get_constraint(self):
+    """
+    Return the constraint (`pygimplib.setting.Group` instance) given the name
+    stored in the current setting value. If the constraint name is not found,
+    return `None`.
+    """
+    if self._constraints is not None:
+      try:
+        return self._names_and_constraints[self.value]
+      except KeyError:
+        return None
+    else:
+      return None
+  
+  def set_constraints(self, constraints):
+    self._constraints = constraints
+    self._names_and_constraints = {
+      constraint.name: constraint for constraint in walk(self._constraints)}
+    
+    if constraints not in self._constraints_set:
+      self._constraints_set.add(constraints)
+      
+      constraints.connect_event("after-add-operation", self._after_add_constraint)
+      constraints.connect_event("after-reorder-operation", self._after_reorder_constraint)
+      constraints.connect_event("before-remove-operation", self._before_remove_constraint)
+      constraints.connect_event("before-clear-operations", self._before_clear_constraints)
+      
+      self.connect_event("after-set-gui", self._after_set_gui, constraints)
+    
+    try:
+      self.gui.set_constraints(constraints)
+    except AttributeError:
+      pass
+  
+  def _after_add_constraint(self, constraints, constraint, constraint_dict):
+    try:
+      self.gui.add_constraint(constraints, constraint)
+    except AttributeError:
+      pass
+  
+  def _after_reorder_constraint(
+        self, constraints, constraint, previous_position, new_position):
+    try:
+      self.gui.reorder_constraint(
+        constraints, constraint, previous_position, new_position)
+    except AttributeError:
+      pass
+  
+  def _before_remove_constraint(self, constraints, constraint):
+    try:
+      self.gui.remove_constraint(constraints, constraint)
+    except AttributeError:
+      pass
+  
+  def _before_clear_constraints(self, constraints):
+    try:
+      self.gui.clear_constraints(constraints)
+    except AttributeError:
+      pass
+  
+  def _after_set_gui(self, setting, constraints):
+    try:
+      self.gui.set_constraints(constraints)
+    except AttributeError:
+      pass
