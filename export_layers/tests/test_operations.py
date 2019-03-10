@@ -877,7 +877,7 @@ class TestCreateConstraintSetting(unittest.TestCase):
       self.assertEqual(getattr(setting, property_name), property_value)
   
   def test_create_setting_with_constraints(self):
-    constraints = operations.create("constraints", get_operation_data(test_constraints))
+    constraints = operations.create("constraints", test_constraints)
     setting = operations.ConstraintSetting("constraint", constraints=constraints)
     
     self.assertEqual(setting.constraints, constraints)
@@ -887,13 +887,14 @@ class TestCreateConstraintSetting(unittest.TestCase):
 
 
 @mock.patch(
-  pg.PYGIMPLIB_MODULE_PATH + ".operations.ConstraintSetting.gui",
+  "export_layers.operations.ConstraintSetting.gui",
   new_callable=mock.PropertyMock)
 class TestConstraintSetting(unittest.TestCase):
   
   def setUp(self):
-    self.constraints = (
-      operations.create("constraints", get_operation_data(test_constraints)))
+    self.initial_constraints_list = test_constraints
+    
+    self.constraints = operations.create("constraints", self.initial_constraints_list)
     self.setting = (
       operations.ConstraintSetting("constraint", constraints=self.constraints))
   
@@ -901,13 +902,55 @@ class TestConstraintSetting(unittest.TestCase):
     ("value_in_constraints", "only_layers", "only_layers"),
     ("value_not_in_constraints", "invalid_constraint", ""),
   ])
-  def test_set_value(self, test_case_name_suffix, constraint_name, expected_value):
+  def test_set_value(
+        self, mock_gui, test_case_name_suffix, constraint_name, expected_value):
     self.setting.set_value(constraint_name)
     self.assertEqual(self.setting.value, expected_value)
   
-  def test_get_constraint_for_existing_constraint_name(self):
+  def test_get_constraint_for_existing_constraint_name(self, mock_gui):
+    self.setting.set_value("only_layers")
     self.assertEqual(
-      self.setting.get_constraint("only_layers"), self.constraints["added/only_layers"])
+      self.setting.get_constraint(), self.constraints["added/only_layers"])
   
-  def test_get_constraint(self):
-    self.assertEqual(self.setting.get_constraint("invalid_constraint"), None)
+  def test_get_constraint(self, mock_gui):
+    self.setting.set_value("invalid_constraint")
+    self.assertEqual(self.setting.get_constraint(), None)
+  
+  def test_gui_is_up_to_date_if_constraints_change(self, mock_gui):
+    operations.add(self.constraints, self.initial_constraints_list[0])
+    operations.reorder(self.constraints, "only_layers", 2)
+    operations.remove(self.constraints, "only_layers")
+    operations.clear(self.constraints)
+    
+    self.assertEqual(
+      self.setting.gui.add_constraint.call_count, len(self.initial_constraints_list) + 1)
+    self.assertEqual(self.setting.gui.reorder_constraint.call_count, 1)
+    self.assertEqual(self.setting.gui.remove_constraint.call_count, 1)
+    self.assertEqual(self.setting.gui.clear_constraints.call_count, 1)
+  
+  def test_set_constraints_new_constraints(self, mock_gui):
+    new_constraints = operations.create("new_constraints", self.initial_constraints_list)
+    self.setting.set_constraints(new_constraints)
+    self._modify_constraints(self.constraints)
+    self._modify_constraints(new_constraints)
+    
+    self._test_constraints_events()
+  
+  def test_set_constraints_existing_constraints(self, mock_gui):
+    self.setting.set_constraints(self.constraints)
+    self._modify_constraints(self.constraints)
+    
+    self._test_constraints_events()
+  
+  def _modify_constraints(self, constraints):
+    operations.add(constraints, self.initial_constraints_list[0])
+    operations.reorder(constraints, "only_layers", 2)
+    operations.remove(constraints, "only_layers")
+    operations.clear(constraints)
+  
+  def _test_constraints_events(self):
+    self.assertEqual(
+      self.setting.gui.add_constraint.call_count, len(self.initial_constraints_list) + 1)
+    self.assertEqual(self.setting.gui.reorder_constraint.call_count, 1)
+    self.assertEqual(self.setting.gui.remove_constraint.call_count, 1)
+    self.assertEqual(self.setting.gui.clear_constraints.call_count, 1)

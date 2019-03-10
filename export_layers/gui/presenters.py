@@ -99,7 +99,10 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
   def remove_constraint(self, constraints, constraint):
     model = self._constraints_and_models[constraints]
     constraint_position = next(
-      (i for i, row in enumerate(model) if row[0] == constraint), None)
+      (i for i, row in enumerate(model)
+       if row[self._COLUMN_CONSTRAINT[0]] == constraint),
+      None)
+    
     if constraint_position is not None:
       del model[constraint_position]
   
@@ -120,18 +123,26 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
     return combo_box
   
   def _get_value(self):
-    return self._list_store[self._element.get_active()]
+    constraint = self._list_store[self._element.get_active()][self._COLUMN_CONSTRAINT[0]]
+    
+    if constraint is not None:
+      return constraint.name
+    else:
+      return self._setting.default_value
   
   def _set_value(self, value):
-    index = next((row for row in range(len(self._list_store)) if row[0] == value), None)
+    constraint_index = self._DEFAULT_VALUE_INDEX
     
-    if index is not None:
-      self._element.set_active(index)
-    else:
-      self._element.set_active(self._DEFAULT_VALUE_INDEX)
+    for index, row in enumerate(self._list_store):
+      constraint = row[self._COLUMN_CONSTRAINT[0]]
+      if constraint is not None and constraint.name == value:
+        constraint_index = index
+        break
+    
+    self._element.set_active(constraint_index)
   
   def _get_combo_box_model(self):
-    list_store = gtk.ListStore(self._COLUMN_DISPLAY_NAME[1])
+    list_store = gtk.ListStore(*[column[1] for column in self._COLUMNS])
     
     list_store.append(self._get_default_row())
     for constraint in self._setting.constraints_iter:

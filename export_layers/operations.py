@@ -774,6 +774,7 @@ class ConstraintSetting(pg.setting.StringSetting):
     self._default_value_display_name = kwargs.pop("default_value_display_name", "")
     self._constraints = kwargs.pop("constraints", None)
     self._names_and_constraints = {}
+    self._event_ids = []
     
     super().__init__(*args, **kwargs)
     
@@ -816,26 +817,48 @@ class ConstraintSetting(pg.setting.StringSetting):
       return None
   
   def set_constraints(self, constraints):
+    self._disconnect_events_for_constraints(self._constraints)
+    
     self._constraints = constraints
     self._names_and_constraints = {
       constraint.name: constraint for constraint in walk(self._constraints)}
     
-    if constraints not in self._constraints_set:
-      self._constraints_set.add(constraints)
-      
-      constraints.connect_event("after-add-operation", self._after_add_constraint)
-      constraints.connect_event("after-reorder-operation", self._after_reorder_constraint)
-      constraints.connect_event("before-remove-operation", self._before_remove_constraint)
-      constraints.connect_event("before-clear-operations", self._before_clear_constraints)
-      
-      self.connect_event("after-set-gui", self._after_set_gui, constraints)
+    self._constraints_set.add(constraints)
+    self._connect_events_for_constraints(constraints)
     
     try:
       self.gui.set_constraints(constraints)
     except AttributeError:
       pass
   
+  def _connect_events_for_constraints(self, constraints):
+    self._event_ids.append(
+      constraints.connect_event("after-add-operation", self._after_add_constraint))
+    
+    self._event_ids.append(
+      constraints.connect_event(
+        "after-reorder-operation", self._after_reorder_constraint))
+    
+    self._event_ids.append(
+      constraints.connect_event(
+        "before-remove-operation", self._before_remove_constraint))
+    
+    self._event_ids.append(
+      constraints.connect_event(
+        "before-clear-operations", self._before_clear_constraints))
+    
+    self._event_ids.append(
+      constraints.connect_event("after-set-gui", self._after_set_gui, constraints))
+  
+  def _disconnect_events_for_constraints(self, constraints):
+    for event_id in self._event_ids:
+      constraints.remove_event(event_id)
+    
+    self._event_ids = []
+  
   def _after_add_constraint(self, constraints, constraint, constraint_dict):
+    self._names_and_constraints[constraint.name] = constraint
+    
     try:
       self.gui.add_constraint(constraints, constraint)
     except AttributeError:
@@ -850,12 +873,16 @@ class ConstraintSetting(pg.setting.StringSetting):
       pass
   
   def _before_remove_constraint(self, constraints, constraint):
+    del self._names_and_constraints[constraint.name]
+    
     try:
       self.gui.remove_constraint(constraints, constraint)
     except AttributeError:
       pass
   
   def _before_clear_constraints(self, constraints):
+    self._names_and_constraints = {}
+    
     try:
       self.gui.clear_constraints(constraints)
     except AttributeError:
