@@ -928,6 +928,18 @@ class TestConstraintSetting(unittest.TestCase):
     self.assertEqual(self.setting.gui.remove_constraint.call_count, 1)
     self.assertEqual(self.setting.gui.clear_constraints.call_count, 1)
   
+  def test_set_constraints_resets_to_default_value(self, mock_gui):
+    self.setting.set_value("only_layers")
+    self.setting.set_constraints(self.constraints)
+    
+    self.assertEqual(self.setting.value, self.setting.default_value)
+  
+  def test_clear_operations_resets_to_default_value(self, mock_gui):
+    self.setting.set_value("only_layers")
+    operations.clear(self.constraints)
+    
+    self.assertEqual(self.setting.value, self.setting.default_value)
+  
   def test_set_constraints_new_constraints(self, mock_gui):
     new_constraints = operations.create("new_constraints", self.initial_constraints_list)
     self.setting.set_constraints(new_constraints)

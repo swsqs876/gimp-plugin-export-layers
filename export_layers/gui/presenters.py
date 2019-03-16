@@ -78,29 +78,31 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
   
   _constraints_and_models = {}
   
-  def set_constraints(self, constraints, element=None):
-    if constraints not in self._constraints_and_models:
-      self._constraints_and_models[constraints] = self._get_combo_box_model()
+  @classmethod
+  def add_constraint(cls, constraints, constraint):
+    cls._constraints_and_models[constraints].append(cls._get_row(constraint))
+  
+  @classmethod
+  def reorder_constraint(cls, constraints, constraint, previous_position, new_position):
+    if previous_position >= cls._DEFAULT_VALUE_INDEX:
+      previous_position += 1
     
-    self._list_store = self._constraints_and_models[constraints]
+    if new_position >= cls._DEFAULT_VALUE_INDEX:
+      new_position += 1
     
-    if element is None:
-      self._element.set_model(self._list_store)
+    model = cls._constraints_and_models[constraints]
+    
+    if new_position >= previous_position:
+      model.move_after(model[previous_position].iter, model[new_position].iter)
     else:
-      element.set_model(self._list_store)
+      model.move_before(model[previous_position].iter, model[new_position].iter)
   
-  def add_constraint(self, constraints, constraint):
-    self._constraints_and_models[constraints].append(self._get_row(constraint))
-  
-  def reorder_constraint(self, constraints, constraint, previous_position, new_position):
-    model = self._constraints_and_models[constraints]
-    model.move_after(model[previous_position].iter, model[new_position].iter)
-  
-  def remove_constraint(self, constraints, constraint):
-    model = self._constraints_and_models[constraints]
+  @classmethod
+  def remove_constraint(cls, constraints, constraint):
+    model = cls._constraints_and_models[constraints]
     constraint_position = next(
       (i for i, row in enumerate(model)
-       if row[self._COLUMN_CONSTRAINT[0]] == constraint),
+       if row[cls._COLUMN_CONSTRAINT[0]] == constraint),
       None)
     
     if constraint_position is not None:
@@ -108,6 +110,19 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
   
   def clear_constraints(self, constraints):
     self._constraints_and_models[constraints].clear()
+    self._fill_combo_box_model(self._constraints_and_models[constraints])
+  
+  def set_constraints(self, constraints, element=None):
+    if constraints not in self._constraints_and_models:
+      self._constraints_and_models[constraints] = self._get_combo_box_model()
+      self._set_default_row_display_name()
+    
+    self._list_store = self._constraints_and_models[constraints]
+    
+    if element is None:
+      element = self._element
+    
+    element.set_model(self._list_store)
   
   def _create_gui_element(self, setting):
     self._list_store = None
@@ -123,7 +138,12 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
     return combo_box
   
   def _get_value(self):
-    constraint = self._list_store[self._element.get_active()][self._COLUMN_CONSTRAINT[0]]
+    index = self._element.get_active()
+    
+    if index == -1:
+      return self._setting.default_value
+    
+    constraint = self._list_store[index][self._COLUMN_CONSTRAINT[0]]
     
     if constraint is not None:
       return constraint.name
@@ -143,15 +163,22 @@ class ConstraintComboBoxPresenter(pg.setting.GtkPresenter):
   
   def _get_combo_box_model(self):
     list_store = gtk.ListStore(*[column[1] for column in self._COLUMNS])
-    
+    self._fill_combo_box_model(list_store)
+    return list_store
+  
+  def _fill_combo_box_model(self, list_store):
     list_store.append(self._get_default_row())
     for constraint in self._setting.constraints_iter:
       list_store.append(self._get_row(constraint))
-    
-    return list_store
   
-  def _get_row(self, constraint):
+  @staticmethod
+  def _get_row(constraint):
     return [constraint, constraint["display_name"].value]
   
-  def _get_default_row(self):
-    return [None, self._setting.default_value_display_name]
+  @staticmethod
+  def _get_default_row():
+    return [None, ""]
+  
+  def _set_default_row_display_name(self):
+    self._list_store[self._COLUMN_CONSTRAINT[0]][1] = (
+      self._setting.default_value_display_name)
